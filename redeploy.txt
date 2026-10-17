@@ -1,0 +1,4 @@
+Redeploy trigger
+
+This file was created to trigger a GitHub Pages redeploy.
+Timestamp: 2026-10-17T11:24:00Z
