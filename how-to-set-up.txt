@@ -1,0 +1,61 @@
+CLINIC EXPENSES - SET-UP GUIDE (for Dr. Owais)
+================================================
+Menu names on Google, Netlify and Apple screens change from time to time, so read the steps as a guide, not a script.
+If a screen looks different, tell me what you see and I will adjust the steps.
+
+PART 1 - Google Sheet that receives the pharmacist's entries (about 5 minutes, on your computer or phone browser)
+1. Go to sheets.google.com and create a new blank spreadsheet. Name it "Clinic Expenses".
+2. Menu: Extensions > Apps Script. Delete everything in the editor.
+3. Open the file apps-script.gs (in this folder), copy ALL of it, and paste it into the editor.
+4. On the line   const KEY = "CHANGE-THIS-SECRET-WORD";   replace the words inside the quotes with your own secret word
+   (letters and numbers, no spaces, e.g. clinic7731). Write it down. Click the Save icon.
+5. Click Deploy > New deployment. Click the gear icon and choose "Web app".
+     Execute as: Me
+     Who has access: Anyone
+   Click Deploy. Google will ask you to authorise. Choose your account. If it says "Google hasn't verified this app",
+   click Advanced > Go to (project name) > Allow. This is your own script on your own sheet.
+6. Copy the "Web app URL" it shows (it ends with /exec). That is the "Sheet link".
+   It must look like https://script.google.com/macros/s/..../exec . A link containing "/macros/library/" is the wrong one
+   (that comes from Deploy > New deployment > Library) and will not work.
+   To build the link into the app so the phone fills it in by itself, open index.html, find the line
+   const SHEET_URL="";   and put the /exec link inside the quotes, then upload the folder to Netlify again.
+7. Optional: in the editor choose the function setupSummary at the top and click Run once. It adds a "Summary" tab.
+   (This one tab uses a Google Sheets formula that I could not test here. The "Expenses" tab is the real record.)
+IMPORTANT: if you ever edit the script later, use Deploy > Manage deployments > pencil icon > Version: New version > Deploy.
+Otherwise the old version keeps running.
+
+PART 2 - Put the app on the internet once, so the iPhone can install it
+The app must be reachable at a secure (https) address once. After the pharmacist installs it, it works with no internet.
+Easiest free way (Netlify Drop):
+1. On your computer, open app.netlify.com/drop in a browser.
+2. Drag the whole "finance-helper" FOLDER (unzipped) onto the page.
+3. It gives you an address like https://something.netlify.app . Sites made without an account may be deleted after a short time,
+   so create the free Netlify account when it offers to keep the site. Open the address on your own phone to confirm it loads.
+(GitHub Pages or Cloudflare Pages also work, but need more steps.)
+
+PART 3 - Install on the pharmacist's iPhone
+1. On the iPhone, open Safari (it must be Safari) and go to the address from Part 2.
+2. Tap the Share button (square with an arrow) > "Add to Home Screen" > Add.
+3. Open the new "Expenses" icon from the home screen. Open it once while online so it saves itself.
+4. Settings (bottom right):
+     Sheet link = the /exec address from Part 1
+     Key        = your secret word
+     This phone's name = e.g. Pharmacist iPhone
+   Tap "Save and test". You should see "Connected".
+5. Optional: set a PIN in Settings.
+
+DAILY USE FOR THE PHARMACIST
+- Tap Add, type the amount, choose what it is for (salary, fuel, clinic expense, restocking, personal), choose the category, name, Save.
+- Works with no internet. Entries show an hourglass until they reach your sheet, then a tick.
+- Tap an entry in "Entries" to edit or delete it.
+
+WHAT YOU SEE
+- Open your "Clinic Expenses" Google Sheet: every entry is a row in the "Expenses" tab (deleted ones are marked "yes" in Deleted).
+- The same entry can never appear twice, even if the phone sends it again.
+
+THINGS TO KNOW
+- Entries live on the phone until they are sent. If the phone is lost or reset before sending, unsent entries are lost.
+  Settings > "Save a backup file" shares a copy (to Files, Google Drive, WhatsApp...). Doing this weekly is wise.
+- If you forget the PIN, the only way in is to erase the app's data on that phone (sent entries stay safe in your sheet).
+- Anyone who has the Sheet link AND the key could add rows to your sheet. Keep both private; to cut off access, change the KEY and re-deploy.
+- This is separate from the main clinic program. The categories use the same names, so the two can be compared later.
