@@ -49,7 +49,7 @@ button.b:disabled{opacity:.5}
 .ban{background:#fef3c7;color:#78350f;border-radius:12px;padding:10px 12px;margin-bottom:12px;font-size:14px}
 @media(prefers-color-scheme:dark){.ban{background:#3b2f0b;color:#fde68a}}
 .ban.e{background:#fee2e2;color:#7f1d1d}
-#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom));background:#0f172a;color:#fff;padding:10px 16px;border-radius:99px;font-size:14px;z-index:20;max-width:90%;opacity:0;pointer-events:none;transition:opacity .2s}
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom));background:#0f172a;color:#fff;padding:10px 16px;border-radius:99px;font-size:14px;z-index:40;opacity:0;transition:opacity .18s}
 #toast.show{opacity:1}#toast.bad{background:var(--bad)}
 #lock{position:fixed;inset:0;background:var(--pri);color:#fff;z-index:50;display:none;align-items:center;justify-content:center;flex-direction:column;padding:24px;text-align:center}
 #lock input{max-width:200px;text-align:center;font-size:28px;letter-spacing:.4em;margin:16px 0 8px;background:rgba(255,255,255,.15);color:#fff;border-color:rgba(255,255,255,.4)}
@@ -61,7 +61,7 @@ footer{text-align:center;color:var(--mut);font-size:12px;margin:18px 0}
 <main id="main"></main>
 <nav id="nav"></nav>
 <div id="toast"></div>
-<div id="lock"><div style="font-size:44px">&#128274;</div><h2 style="font-size:20px">Clinic Expenses</h2><div id="lockmsg">Enter your PIN</div><input id="lockpin" type="password" inputmode="numeric" maxlength="8" autocomplete="off"><button onclick="tryPin()">Open</button><button class="lk" onclick="forgotPin()">Forgot PIN?</button></div>
+<div id="lock"><div style="font-size:44px">&#128274;</div><h2 style="font-size:20px">Clinic Expenses</h2><div id="lockmsg">Enter your PIN</div><input id="lockpin" type="password" inputmode="numeric" maxlength="8" autocomplete="off"><button onclick="tryPin()">Unlock</button><button class="lk" onclick="forgotPin()">Forgot PIN</button></div>
 <script>
 /* ---------- storage ---------- */
 const LS={get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},
@@ -71,18 +71,20 @@ const GROUPS=[
  {k:"fuel",n:"Clinic car fuel",c:["Clinic car fuel"]},
  {k:"clin",n:"Clinic expenses",c:["Rent","Utilities","Maintenance and repairs","Other clinic expense"]},
  {k:"stock",n:"Inventory restocking",c:["Supplier restock"]},
- {k:"pers",n:"Personal",c:["Personal - Groceries","Personal - Fuel","Personal - Other"]}];
+ {k:"inc",n:"Income",c:["Doctor's Fees","Medicine sold"]},
+ {k:"pers",n:"Personal",c:["Personal - Groceries","Personal - Fuel","Personal - Other"]}
+];
 /* The doctor's Google Sheet link (Apps Script "Web app URL", ends in /exec). Filled in automatically on every phone; only the key is typed in Settings. */
 const SHEET_URL="https://script.google.com/macros/s/AKfycbxNF63DVxCtm_JT7GwyVfhpDeNFFY8Uc3BeSKPeqoYzyyDhH95lfJi7zWcJcJysCjlu/exec";
-const OLD_URLS=["https://script.google.com/macros/s/AKfycbwsnLE-tyYte-2sB3SMqiIkPdKJUyDEkFy6lm4P-iJZoFt49B-RxrV5jo8olXJ-2qmD/exec"]; // earlier built-in links: phones still holding one switch to SHEET_URL
+const OLD_URLS=["https://script.google.com/macros/s/AKfycbwsnLE-tyYte-2sB3SMqiIkPdKJUyDEkFy6lm4P-iJZoFt49B-RxrV5jo8olXJ-2qmD/exec"]; // earlier built-in links
 const isExec=u=>/^https:\/\/script\.google\.com\/(a\/macros\/[^/]+|macros)\/s\/[^/]+\/exec\/?$/.test(u);
-const DEF={cur:"Rs",dev:"Pharmacist phone",url:SHEET_URL,key:"",pin:"",extra:{},lastSafe:""};
+const DEF={cur:"Rs",dev:"Pharmacist phone",url:SHEET_URL,key:"",pin:"",extra:{},lastSafe:"",meds:[]};
 let S=Object.assign({},DEF,LS.get("ce_s",{})),E=LS.get("ce_e",[]);
 if(SHEET_URL&&(!S.url||OLD_URLS.includes(S.url)))S.url=SHEET_URL;
 const save=()=>{const a=LS.set("ce_e",E),b=LS.set("ce_s",S);return a&&b};
 /* ---------- helpers ---------- */
 const $=s=>document.querySelector(s);
-const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
 const today=()=>{const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")};
 const uid=()=>(crypto.randomUUID?crypto.randomUUID():"x"+Date.now().toString(36)+Math.random().toString(36).slice(2,10));
 const groupOf=k=>GROUPS.find(g=>g.k===k)||GROUPS[2];
@@ -94,7 +96,7 @@ const monthName=m=>{const[y,mo]=m.split("-");return new Date(+y,+mo-1,1).toLocal
 const months=()=>[...new Set(live().map(e=>e.d.slice(0,7)))].sort().reverse();
 let tt=null;function toast(m,bad){const t=$("#toast");t.textContent=m;t.className="show"+(bad?" bad":"");clearTimeout(tt);tt=setTimeout(()=>t.className="",bad?4000:2200)}
 /* ---------- state ---------- */
-let view="add",editing=null,fm={g:"clin",c:"",a:"",d:"",w:"",n:""},fMonth="",sMonth="",syncing=false,syncErr="";
+let view="add",editing=null,fm={g:"clin",c:"",a:"",d:"",w:"",n:"",med:"",qty:1,adj:""},fMonth="",sMonth="",syncing=false,syncErr="";
 const TABS=[["add","&#10133;","Add"],["list","&#128196;","Entries"],["sum","&#128202;","Summary"],["set","&#9881;&#65039;","Settings"]];
 function go(v){view=v;draw();window.scrollTo(0,0)}
 function draw(){
@@ -113,38 +115,63 @@ function addView(){
  if(!fm.d)fm.d=today();
  if(!cats(fm.g).includes(fm.c))fm.c=cats(fm.g)[0];
  const names=[...new Set(E.map(e=>e.w).filter(Boolean))];
- return`<div class="card"><h2>${editing?"Edit entry":"New expense"}</h2>
+ const medOptions=S.meds.map(m=>`<option value="${esc(m.name)}" data-cost="${m.cost}" data-sell="${m.sell}">${esc(m.name)} (C:${m.cost} S:${m.sell})</option>`).join("");
+ return`<div class="card"><h2>${editing?"Edit entry":"New entry"}</h2>
  <label>Amount (${esc(S.cur)})</label><input class="amt" id="fa" inputmode="decimal" placeholder="0" value="${esc(fm.a)}" oninput="fm.a=this.value">
- <label>What is it for?</label><div class="chips">${GROUPS.map(g=>`<button class="chip ${g.k===fm.g?"on":""}" onclick="setG('${g.k}')">${esc(g.n)}</button>`).join("")}</div>
- <label>Category</label><select id="fc" onchange="fm.c=this.value">${cats(fm.g).map(c=>`<option ${c===fm.c?"selected":""}>${esc(c)}</option>`).join("")}</select>
- <label>${fm.g==="stock"?"Supplier or shop":"Paid to or taken by"}</label><input id="fw" list="names" value="${esc(fm.w)}" oninput="fm.w=this.value" autocomplete="off"><datalist id="names">${names.map(n=>`<option value="${esc(n)}">`).join("")}</datalist>
- <label>Note (optional)</label><input id="fn" value="${esc(fm.n)}" oninput="fm.n=this.value" placeholder="${fm.g==="stock"?"What was bought":"For example: October salary"}">
+ <label>Type</label><div class="chips">${GROUPS.map(g=>`<button class="chip ${g.k===fm.g?"on":""}" onclick="setG('${g.k}')">${esc(g.n)}</button>`).join("")}</div>
+ <label>Category</label><select id="fc" onchange="fm.c=this.value;onCategoryChanged()">${cats(fm.g).map(c=>`<option ${c===fm.c?"selected":""}>${esc(c)}</option>`).join("")}</select>
+ <label>${fm.g==="stock"?"Supplier or shop":(fm.g==="inc"?"Received from":"Paid to or taken by")}</label><input id="fw" list="names" value="${esc(fm.w)}" oninput="fm.w=this.value" autocomplete="off"><datalist id="names">${names.map(n=>`<option>${esc(n)}</option>`).join("")}</datalist>
+ <div id="medextras">${fm.g==='inc' && fm.c==='Medicine sold'?`<label>Medicine</label><select id="medsel" onchange="onMedChange()"><option value="">Choose medicine</option>${medOptions}</select>
+ <label>Quantity</label><input id="medqty" type="number" min="1" value="${fm.qty||1}" oninput="onMedChange()">
+ <label>Price adjustment (add or subtract per unit)</label><input id="medadj" inputmode="decimal" value="${esc(fm.adj)}" oninput="onMedChange()">
+ <label>Note (optional)</label><input id="fn" value="${esc(fm.n)}" oninput="fm.n=this.value" placeholder="Optional note">`:
+ `<label>Note (optional)</label><input id="fn" value="${esc(fm.n)}" oninput="fm.n=this.value" placeholder="Optional note">`}
+ </div>
  <label>Date</label><input type="date" id="fd" value="${esc(fm.d)}" onchange="fm.d=this.value">
- <button class="b" id="savebtn" onclick="saveEntry()">${editing?"Save changes":"Save expense"}</button>
+ <button class="b" id="savebtn" onclick="saveEntry()">${editing?"Save changes":"Save"}</button>
  ${editing?`<button class="b s" onclick="cancelEdit()">Cancel</button><button class="b d" onclick="delEntry()">Delete this entry</button>`:""}</div>`}
-function setG(g){fm.g=g;fm.c="";draw()}
-function resetForm(){fm={g:fm.g,c:"",a:"",d:today(),w:"",n:""};editing=null}
+function onCategoryChanged(){
+ // when category becomes Medicine sold, prefill medicine fields if possible
+ if(fm.g==='inc' && fm.c==='Medicine sold'){
+   // leave fm as is; show med extras; nothing more
+ }
+ draw();}
+function setG(g){fm.g=g;fm.c="";fm.med="";fm.qty=1;fm.adj="";draw()}
+function resetForm(){fm={g:fm.g,c:"",a:"",d:today(),w:"",n:"",med:"",qty:1,adj:""};editing=null}
+function computeMedAmount(){
+ const sel=$("#medsel"); if(!sel) return;
+ const name=sel.value; if(!name) return;
+ const med=S.meds.find(m=>m.name===name); if(!med) return;
+ const qty=parseFloat($("#medqty").value)||1; const adj=parseFloat($("#medadj").value)||0;
+ const amount=(parseFloat(med.sell)||0 + adj) * qty; fm.a=String(Math.round(amount*100)/100);
+ // include cost/sell info into note automatically (preserve existing note)
+ const info=`medicine:${med.name};qty:${qty};cost:${med.cost};sell:${med.sell};adj:${adj}`;
+ fm.n = (fm.n||"") + (fm.n?" \n ":"") + info;
+}
+function onMedChange(){try{computeMedAmount();draw();}catch(e){}}
 function saveEntry(){
  const a=parseFloat(String(fm.a).replace(/,/g,""));
  if(!(a>0)){toast("Enter an amount greater than zero.",1);return}
  if(!fm.d){toast("Choose a date.",1);return}
- const now=new Date().toISOString(),f={d:fm.d,a,g:fm.g,c:fm.c,w:fm.w.trim(),n:fm.n.trim(),u:now};
+ const now=new Date().toISOString();
+ let f={d:fm.d,a,g:fm.g,c:fm.c,w:fm.w.trim(),n:fm.n.trim(),u:now};
+ // add medicine metadata to note when applicable (if not already present)
+ if(fm.g==='inc' && fm.c==='Medicine sold' && fm.med){
+   const med=S.meds.find(m=>m.name===fm.med)||S.meds.find(m=>m.name===$("#medsel")?.value);
+   if(med){const qty=fm.qty||parseFloat($("#medqty")?.value)||1;const adj=parseFloat(fm.adj)||0;const minfo=`medicine:${med.name};qty:${qty};cost:${med.cost};sell:${med.sell};adj:${adj}`;f.n=(f.n?f.n+" \n ":"")+minfo}
+ }
  if(editing){const e=E.find(x=>x.id===editing);if(e)Object.assign(e,f)}else E.push({id:uid(),del:false,sy:"",cr:now,...f});
- if(!save())return;
- const was=editing;resetForm();toast(was?"Changes saved.":"Saved ✓");kickSync();if(was)view="list";draw()}
-function editEntry(id){const e=E.find(x=>x.id===id);if(!e)return;editing=id;fm={g:e.g,c:e.c,a:String(e.a),d:e.d,w:e.w,n:e.n};view="add";draw();window.scrollTo(0,0)}
+ if(!save())return;const was=editing;resetForm();toast(was?"Changes saved.":"Saved ✓");kickSync();if(was)view="list";draw()}
+function editEntry(id){const e=E.find(x=>x.id===id);if(!e)return;editing=id;fm={g:e.g,c:e.c,a:String(e.a),d:e.d,w:e.w,n:e.n,med:"",qty:1,adj:""};view="add";draw();window.scrollTo(0,0)}
 function cancelEdit(){resetForm();view="list";draw()}
-function delEntry(){
- if(!confirm("Delete this entry? It will be removed from the list and from the Google Sheet totals."))return;
- const e=E.find(x=>x.id===editing);if(e){e.del=true;e.u=new Date().toISOString()}
- save();resetForm();toast("Deleted.");kickSync();view="list";draw()}
+function delEntry(){if(!confirm("Delete this entry? It will be removed from the list and from the Google Sheet totals."))return;const e=E.find(x=>x.id===editing);if(e){e.del=true;e.u=new Date().toISOString()}save();resetForm();toast("Deleted.");kickSync();view="list";draw()}
 /* ---------- list ---------- */
 function listView(){
  const ms=months(),m=ms.includes(fMonth)||fMonth==="all"?fMonth:(ms[0]||"all");fMonth=m;
  const rows=live().filter(e=>m==="all"||e.d.slice(0,7)===m).sort((a,b)=>b.d.localeCompare(a.d)||b.cr.localeCompare(a.cr));
  const tot=rows.reduce((s,e)=>s+e.a,0);let last="",h="";
  rows.forEach(e=>{if(e.d!==last){last=e.d;h+=`<div class="dh">${new Date(e.d+"T00:00").toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short",year:"numeric"})}</div>`}
-  h+=`<div class="row" onclick="editEntry('${e.id}')"><div class="t">${esc(e.c)}<small>${esc([e.w,e.n].filter(Boolean).join(" · "))||"&nbsp;"}</small></div><div class="m">${fmt(e.a)}</div><div title="${pending(e)?"waiting to send":"sent"}" style="color:${pending(e)?"var(--warn)":"var(--ok)"}">${S.url?(pending(e)?"⏳":"✓"):""}</div></div>`});
+  h+=`<div class="row" onclick="editEntry('${e.id}')"><div class="t">${esc(e.c)}<small>${esc([e.w,e.n].filter(Boolean).join(" · "))||"&nbsp;"}</small></div><div class="m">${fmt(e.a)}</div></div>`});
  return`<div class="card"><h2>Entries</h2><select onchange="fMonth=this.value;draw()"><option value="all" ${m==="all"?"selected":""}>All months</option>${ms.map(x=>`<option value="${x}" ${x===m?"selected":""}>${monthName(x)}</option>`).join("")}</select>
  <div class="mut" style="margin-top:10px">Total shown</div><div class="tot">${fmt(tot)}</div></div>
  <div class="card">${h||`<p class="mut">No entries yet. Tap Add to record the first one.</p>`}</div>
@@ -155,19 +182,45 @@ function sumView(){
  if(!m)return`<div class="card"><h2>Summary</h2><p class="mut">Nothing to summarise yet.</p></div>`;
  const rows=live().filter(e=>e.d.slice(0,7)===m),tot=rows.reduce((s,e)=>s+e.a,0);
  const byG=GROUPS.map(g=>{const r=rows.filter(e=>e.g===g.k),t=r.reduce((s,e)=>s+e.a,0),c={};r.forEach(e=>c[e.c]=(c[e.c]||0)+e.a);return{g,t,c}}).filter(x=>x.t>0);
- return`<div class="card"><h2>Summary</h2><select onchange="sMonth=this.value;draw()">${ms.map(x=>`<option value="${x}" ${x===m?"selected":""}>${monthName(x)}</option>`).join("")}</select>
- <div class="mut" style="margin-top:10px">Total spent</div><div class="tot">${fmt(tot)}</div></div>
- <div class="card">${byG.map(x=>`<div style="display:flex;justify-content:space-between"><b>${esc(x.g.n)}</b><b>${fmt(x.t)}</b></div><div class="bar"><i style="width:${Math.round(x.t/tot*100)}%"></i></div>${Object.entries(x.c).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div class="sub"><span>${esc(k)}</span><span>${fmt(v)}</span></div>`).join("")}<div style="height:10px"></div>`).join("")}</div>
- <div class="card"><h2>Month by month</h2>${ms.slice(0,12).map(x=>`<div class="row" onclick="sMonth='${x}';draw()"><div class="t">${monthName(x)}</div><div class="m">${fmt(live().filter(e=>e.d.slice(0,7)===x).reduce((s,e)=>s+e.a,0))}</div></div>`).join("")}</div>`}
+ let html=`<div class="card"><h2>Summary</h2><select onchange="sMonth=this.value;draw()">${ms.map(x=>`<option value="${x}" ${x===m?"selected":""}>${monthName(x)}</option>`).join("")}</select>
+ <div class="mut" style="margin-top:10px">Total</div><div class="tot">${fmt(tot)}</div></div>`;
+ html+=`<div class="card">${byG.map(x=>`<div style="display:flex;justify-content:space-between"><b>${esc(x.g.n)}</b><b>${fmt(x.t)}</b></div><div style="margin-top:8px">`+
+   Object.keys(x.c).map(k=>`<div style="display:flex;justify-content:space-between"><div>${esc(k)}</div><div>${fmt(x.c[k])}</div></div>`).join("")+`</div>`).join("")}</div>`;
+ // additional personal breakdown by who was paid
+ const persRows=rows.filter(e=>e.g==='pers');
+ if(persRows.length){
+   const byWho={};persRows.forEach(e=>{const who=e.w||'Unknown';byWho[who]=(byWho[who]||0)+e.a});
+   html+=`<div class="card"><h2>Personal — by recipient</h2>${Object.keys(byWho).map(k=>`<div style="display:flex;justify-content:space-between"><div>${esc(k)}</div><div>${fmt(byWho[k])}</div></div>`).join("")}</div>`;
+ }
+ // income details: show medicines sold summary (by medicine if info encoded in note)
+ const incomeMedRows=rows.filter(e=>e.g==='inc' && e.c==='Medicine sold');
+ if(incomeMedRows.length){
+   const medAgg={};
+   incomeMedRows.forEach(e=>{
+     const note=e.n||""; const m=(note.match(/medicine:([^;\s]+)/)||[])[1]; const qty=parseFloat((note.match(/qty:([0-9.]+)/)||[])[1])||1; const cost=parseFloat((note.match(/cost:([0-9.]+)/)||[])[1])||0; const sell=parseFloat((note.match(/sell:([0-9.]+)/)||[])[1])||0;
+     if(m){medAgg[m]=medAgg[m]||{qty:0,cost:0,sell:0,amount:0}; medAgg[m].qty+=qty; medAgg[m].cost+=cost*qty; medAgg[m].sell+=sell*qty; medAgg[m].amount+=e.a}
+   });
+   if(Object.keys(medAgg).length){
+     html+=`<div class="card"><h2>Medicines sold</h2>${Object.keys(medAgg).map(m=>`<div style="display:flex;justify-content:space-between"><div>${esc(m)} · ${medAgg[m].qty} units</div><div>${fmt(medAgg[m].amount)}</div></div>`).join("")}</div>`;
+   }
+ }
+ return html}
 /* ---------- settings ---------- */
 function setView(){
  const n=E.filter(pending).length;
  return`<div class="card"><h2>Google Sheet (automatic copy for the doctor)</h2>
- <p class="mut">${S.url?(syncErr?"Could not reach the sheet: "+esc(syncErr)+". Entries stay safe here and are sent later.":n?n+" entries waiting to be sent.":"Everything has been sent."):"Not set up yet. The doctor gives you a link and a key."}</p>
+ <p class="mut">${S.url?(syncErr?"Could not reach the sheet: "+esc(syncErr)+". Entries stay safe here and are sent later.":n?n+" entries waiting to be sent.":"Everything has been sent."):"Not set"}</p>
  <label>Sheet link</label><input id="su" value="${esc(S.url)}" placeholder="https://script.google.com/macros/s/.../exec" autocapitalize="off" autocorrect="off">
  <label>Key</label><input id="sk" value="${esc(S.key)}" autocapitalize="off" autocorrect="off">
  <label>This phone's name</label><input id="sd" value="${esc(S.dev)}">
  <button class="b" onclick="saveSync()">Save and test</button><button class="b s" onclick="syncAll(true)">Send waiting entries now</button></div>
+ <div class="card"><h2>Medicines (for "Medicine sold")</h2>
+ <p class="mut">Add medicines with cost and sell price. They will be available when adding a "Medicine sold" income entry.</p>
+ <div id="medlist">${S.meds.length?S.meds.map((m,i)=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0"><div><b>${esc(m.name)}</b><div class="mut">Cost: ${m.cost} · Sell: ${m.sell}</div></div><div><button class="b s" onclick="editMed(${i})">Edit</button> <button class="b d" onclick="deleteMed(${i})">Delete</button></div></div>`).join(""):`<p class="mut">No medicines added yet.</p>`}</div>
+ <label>Medicine name</label><input id="mn">
+ <label>Cost price</label><input id="mc" inputmode="decimal">
+ <label>Sell price</label><input id="ms" inputmode="decimal">
+ <button class="b s" onclick="addMed()">Add / Update medicine</button></div>
  <div class="card"><h2>Backup on this phone</h2><p class="mut">Use Share to save a copy to Files, Google Drive, WhatsApp or email.</p>
  <button class="b s" onclick="exportCsv()">Share expenses spreadsheet (CSV)</button><button class="b s" onclick="exportJson()">Save a backup file</button>
  <label style="margin-top:14px">Restore from a backup file</label><input type="file" accept=".json,application/json" onchange="restore(this)"></div>
@@ -177,57 +230,37 @@ function setView(){
  <div class="card"><h2>Other</h2><label>Currency label</label><input id="cu" value="${esc(S.cur)}" onchange="S.cur=this.value.trim()||'Rs';save();toast('Saved')">
  <label>Add your own category</label><select id="xg">${GROUPS.map(g=>`<option value="${g.k}">${esc(g.n)}</option>`).join("")}</select><input id="xc" placeholder="Category name" style="margin-top:8px">
  <button class="b s" onclick="addCat()">Add category</button></div>`}
-function addCat(){const g=$("#xg").value,c=$("#xc").value.trim();if(!c)return;if(cats(g).includes(c)){toast("That category already exists.",1);return}
- (S.extra[g]=S.extra[g]||[]).push(c);save();toast("Category added.");draw()}
+function addCat(){const g=$("#xg").value,c=$("#xc").value.trim();if(!c)return;if(cats(g).includes(c)){toast("That category already exists.",1);return}(S.extra[g]=S.extra[g]||[]).push(c);save();toast("Category added.");draw()}
+function addMed(){const name=$("#mn").value.trim();const cost=parseFloat($("#mc").value)||0;const sell=parseFloat($("#ms").value)||0;if(!name){toast("Enter a medicine name.",1);return}
+ // if exists update
+ const i=S.meds.findIndex(m=>m.name.toLowerCase()===name.toLowerCase());if(i>=0){S.meds[i]={name,price:undefined,cost,sell,cost:cost, sell:sell};}else{S.meds.push({name,cost,sell});}
+ save();toast("Medicine saved.");draw();$("#mn").value=$("#mc").value=$("#ms").value=""}
+function editMed(i){const m=S.meds[i];if(!m)return;$("#mn").value=m.name;$("#mc").value=m.cost;$("#ms").value=m.sell; // delete the old one on save
+ S.meds.splice(i,1);}
+function deleteMed(i){if(!confirm("Delete this medicine?"))return;S.meds.splice(i,1);save();toast("Deleted.");draw()}
 /* ---------- sync to Google Sheet ---------- */
 const rowOf=e=>({id:e.id,d:e.d,a:e.a,g:e.g,gn:groupOf(e.g).n,c:e.c,w:e.w,n:e.n,del:!!e.del,u:e.u,dev:S.dev});
-async function getJSON(url){const ac=new AbortController(),t=setTimeout(()=>ac.abort(),20000);
- try{const r=await fetch(url,{signal:ac.signal});return await r.json()}finally{clearTimeout(t)}}
+async function getJSON(url){const ac=new AbortController(),t=setTimeout(()=>ac.abort(),20000);try{const r=await fetch(url,{signal:ac.signal});return await r.json()}finally{clearTimeout(t)}}
 const join=(u,q)=>u+(u.includes("?")?"&":"?")+q;
-async function syncAll(manual){
- if(!S.url||!S.key){if(manual)toast("Add the sheet link and key first.",1);return}
- if(syncing)return;syncing=true;syncErr="";hdr();
- try{
-  for(const e of E.filter(pending)){
-   const u=e.u,r=await getJSON(join(S.url,"op=upsert&key="+encodeURIComponent(S.key)+"&d="+encodeURIComponent(JSON.stringify(rowOf(e)))));
-   if(!r||!r.ok)throw new Error((r&&r.err)||"The sheet refused the entry");
-   e.sy=u;save()}
-  S.lastSafe=new Date().toISOString();save();if(manual)toast("Everything sent ✓");
- }catch(x){syncErr=x.name==="AbortError"?"timed out":(x.message==="Failed to fetch"||x.name==="TypeError"?"no internet":x.message);if(manual)toast("Not sent: "+syncErr,1)}
- syncing=false;hdr();if(view==="list")draw()}
+async function syncAll(manual){if(!S.url||!S.key){if(manual)toast("Add the sheet link and key first.",1);return}if(syncing)return;syncing=true;syncErr="";hdr();try{for(const e of E.filter(pending)){const u=e.u,r=await getJSON(join(S.url,"op=upsert&key="+encodeURIComponent(S.key)+"&d="+encodeURIComponent(JSON.stringify(rowOf(e)))));if(!r||!r.ok)throw new Error((r&&r.err)||"The sheet refused the entry");e.sy=u;save()}S.lastSafe=new Date().toISOString();save();if(manual)toast("Everything sent ✓");}catch(x){syncErr=x.name==="AbortError"?"timed out":(x.message==="Failed to fetch"||x.name==="TypeError"?"no internet":x.message);if(manual)toast("Not sent: "+syncErr,1)}syncing=false;hdr();if(view==="list")draw()}
 let kt=null;function kickSync(){clearTimeout(kt);kt=setTimeout(()=>syncAll(false),800)}
-async function saveSync(){
- S.url=$("#su").value.trim();S.key=$("#sk").value.trim();S.dev=$("#sd").value.trim()||"Pharmacist phone";save();
- if(!S.url||!S.key){toast("Sync turned off.");draw();return}
- if(!isExec(S.url)){toast("That is not a Web app link. Use the link from Deploy > New deployment > Web app (it ends in /exec).",1);draw();return}
- try{const r=await getJSON(join(S.url,"op=ping&key="+encodeURIComponent(S.key)));
-  if(r&&r.ok){syncErr="";toast("Connected ✓");syncAll(false)}else toast("Connected, but the key is wrong.",1)}
- catch(e){syncErr="could not reach the sheet";toast("Could not reach the sheet. If the internet works, the doctor needs to re-deploy the Google script (Manage deployments > New version).",1)}
- draw()}
+async function saveSync(){S.url=$("#su").value.trim();S.key=$("#sk").value.trim();S.dev=$("#sd").value.trim()||"Pharmacist phone";save();if(!S.url||!S.key){toast("Sync turned off.");draw();return}if(!isExec(S.url)){toast("That is not a Web app link. Use the link from Deploy > New deployment > Web app (it ends in /exec).",1);draw();return}try{const r=await getJSON(join(S.url,"op=ping&key="+encodeURIComponent(S.key)));if(r&&r.ok){syncErr="";toast("Connected ✓");syncAll(false)}else toast("Connected, but the key is wrong.",1)}catch(e){syncErr="could not reach the sheet";toast("Could not reach the sheet. If the internet works, the doctor needs to re-deploy the Google script (Manage deployments > New version).",1)}draw()}
 /* ---------- backup ---------- */
-async function shareFile(name,text,type){
- const f=new File([text],name,{type});
- if(navigator.canShare&&navigator.canShare({files:[f]})){try{await navigator.share({files:[f],title:name});return true}catch(e){if(e.name==="AbortError")return false}}
- const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;document.body.appendChild(a);a.click();a.remove();return true}
+async function shareFile(name,text,type){const f=new File([text],name,{type});if(navigator.canShare&&navigator.canShare({files:[f]})){try{await navigator.share({files:[f],title:name});return true}catch(e){if(e.name==="AbortError")return false}}const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;document.body.appendChild(a);a.click();a.remove();return true}
 const q=x=>'"'+String(x==null?"":x).replace(/"/g,'""')+'"';
-function csvText(){return"﻿"+[["Date","Group","Category","Paid to / taken by","Note","Amount"].map(q).join(",")].concat(live().sort((a,b)=>a.d.localeCompare(b.d)).map(e=>[e.d,groupOf(e.g).n,e.c,e.w,e.n,e.a].map(q).join(","))).join("\r\n")+"\r\n"}
+function csvText(){return"﻿"+[[("Date","Group","Category","Paid to / taken by","Note","Amount").map(q).join(",")]].concat(live().sort((a,b)=>a.d.localeCompare(b.d)).map(e=>[e.d,groupOf(e.g).n,e.c,e.w,e.n,e.a].map(q).join(","))).join("\n")} 
 async function exportCsv(){if(await shareFile("expenses-"+today()+".csv",csvText(),"text/csv")){S.lastSafe=new Date().toISOString();save()}}
-async function exportJson(){if(await shareFile("expenses-backup-"+today()+".json",JSON.stringify({v:1,entries:E,settings:{...S,pin:""}}),"application/json")){S.lastSafe=new Date().toISOString();save();toast("Backup saved ✓")}}
-function restore(inp){const f=inp.files[0];if(!f)return;const r=new FileReader();
- r.onload=()=>{try{const j=JSON.parse(r.result);if(!j||!Array.isArray(j.entries))throw 0;let n=0;
-  j.entries.forEach(x=>{if(!x||!x.id||!x.d||!(x.a>=0))return;const c=E.find(e=>e.id===x.id);if(!c){E.push(x);n++}else if(String(x.u)>String(c.u)){Object.assign(c,x);n++}});
-  save();toast(n+" entries restored.");draw()}catch(e){toast("That is not a valid backup file.",1)}};r.readAsText(f)}
+async function exportJson(){if(await shareFile("expenses-backup-"+today()+".json",JSON.stringify({v:1,entries:E,settings:{...S,pin:""}}),"application/json")){S.lastSafe=new Date().toISOString();save()}}
+function restore(inp){const f=inp.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const j=JSON.parse(r.result);if(!j||!Array.isArray(j.entries))throw 0;let n=0;j.entries.forEach(x=>{if(!x||!x.id||!x.d||!(x.a>=0))return;const c=E.find(e=>e.id===x.id);if(!c){E.push(x);n++}else if(String(x.u)>String(c.u)){Object.assign(c,x);n++}});save();toast(n+" entries restored.");draw()}catch(e){toast("That is not a valid backup file.",1)}};r.readAsText(f)}
 /* ---------- PIN lock ---------- */
-async function hashPin(p){try{const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode("ce|"+p));return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("")}catch(e){return"p|"+btoa(p)}}
+async function hashPin(p){try{const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode("ce|"+p));return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("")}catch(e){return""}}
 async function setPin(){const p=$("#np").value.trim();if(!/^\d{4,8}$/.test(p)){toast("Use 4 to 8 digits.",1);return}S.pin=await hashPin(p);save();toast("PIN saved.");draw()}
 function removePin(){if(confirm("Remove the PIN lock?")){S.pin="";save();draw()}}
 function lock(){if(!S.pin)return;$("#lock").style.display="flex";$("#lockpin").value="";$("#lockmsg").textContent="Enter your PIN"}
 async function tryPin(){const h=await hashPin($("#lockpin").value);if(h===S.pin){$("#lock").style.display="none"}else{$("#lockmsg").textContent="Wrong PIN, try again";$("#lockpin").value=""}}
-function forgotPin(){if(confirm("Forgot PIN? The only way in is to erase everything saved on this phone. Entries already sent to the Google Sheet are NOT lost, but entries not yet sent would be. Erase this phone's data?")){E=[];S.pin="";save();$("#lock").style.display="none";draw()}}
-$("#lockpin").addEventListener("keydown",e=>{if(e.key==="Enter")tryPin()});
-let hiddenAt=0;
+function forgotPin(){if(confirm("Forgot PIN? The only way in is to erase everything saved on this phone. Entries already sent to the Google Sheet are NOT lost, but entries not yet sent would be. Continue?")){E=[];S={...DEF};save();draw();toast("App data cleared.")}}
 document.addEventListener("visibilitychange",()=>{if(document.hidden){hiddenAt=Date.now()}else{if(S.pin&&hiddenAt&&Date.now()-hiddenAt>5*60e3)lock();kickSync()}});
-/* ---------- start ---------- */
+let hiddenAt=0;
 window.addEventListener("online",kickSync);setInterval(()=>{if(navigator.onLine)syncAll(false)},60000);
 if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});
 try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}
