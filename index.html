@@ -63,16 +63,15 @@ footer{text-align:center;color:var(--mut);font-size:12px;margin:18px 0}
 <div id="toast"></div>
 <div id="lock"><div style="font-size:44px">&#128274;</div><h2 style="font-size:20px">Clinic Expenses</h2><div id="lockmsg">Enter your PIN</div><input id="lockpin" type="password" inputmode="numeric" maxlength="8" autocomplete="off"><button onclick="tryPin()">Unlock</button><button class="lk" onclick="forgotPin()">Forgot PIN</button></div>
 <script>
-/* ---------- storage ---------- */
 const LS={get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},
  set(k,v){try{localStorage.setItem(k,JSON.stringify(v));return true}catch(e){toast("Could not save on this phone. Storage may be full or blocked.",1);return false}}};
 const GROUPS=[
- {k:"sal",n:"Staff salaries",c:["Salary - Driver","Salary - Pharmacist","Salary - Lab","Salary - Radiology","Salary - Other staff"]},
- {k:"fuel",n:"Clinic car fuel",c:["Clinic car fuel"]},
- {k:"clin",n:"Clinic expenses",c:["Rent","Utilities","Maintenance and repairs","Other clinic expense"]},
- {k:"stock",n:"Inventory restocking",c:["Supplier restock"]},
- {k:"inc",n:"Income",c:["Doctor's Fees","Medicine sold"]},
- {k:"pers",n:"Personal",c:["Personal - Groceries","Personal - Fuel","Personal - Other"]}
+  {k:"sal",n:"Staff salaries",c:["Salary - Driver","Salary - Pharmacist","Salary - Lab","Salary - Radiology","Salary - Other staff"]},
+  {k:"fuel",n:"Clinic car fuel",c:["Clinic car fuel"]},
+  {k:"clin",n:"Clinic expenses",c:["Rent","Utilities","Maintenance and repairs","Other clinic expense"]},
+  {k:"stock",n:"Inventory restocking",c:["Supplier restock"]},
+  {k:"inc",n:"Income",c:["Doctor's Fees","Medicine sold"]},
+  {k:"pers",n:"Personal",c:["Personal - Groceries","Personal - Fuel","Personal - Other"]}
 ];
 const SHEET_URL="https://script.google.com/macros/s/AKfycbxNF63DVxCtm_JT7GwyVfhpDeNFFY8Uc3BeSKPeqoYzyyDhH95lfJi7zWcJcJysCjlu/exec";
 const OLD_URLS=["https://script.google.com/macros/s/AKfycbwsnLE-tyYte-2sB3SMqiIkPdKJUyDEkFy6lm4P-iJZoFt49B-RxrV5jo8olXJ-2qmD/exec"];
@@ -81,6 +80,7 @@ const DEF={cur:"Rs",dev:"Pharmacist phone",url:SHEET_URL,key:"",pin:"",extra:{},
 let S=Object.assign({},DEF,LS.get("ce_s",{})),E=LS.get("ce_e",[]);
 if(SHEET_URL&&(!S.url||OLD_URLS.includes(S.url)))S.url=SHEET_URL;
 if(!Array.isArray(S.incomeCats)||S.incomeCats.length===0)S.incomeCats=["Doctor's Fees","Medicine sold"];
+if(!Array.isArray(S.meds))S.meds=[];
 const save=()=>{const a=LS.set("ce_e",E),b=LS.set("ce_s",S);return a&&b};
 const $=s=>document.querySelector(s);
 const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
@@ -88,10 +88,7 @@ const today=()=>{const d=new Date();return d.getFullYear()+"-"+String(d.getMonth
 const uid=()=>(crypto.randomUUID?crypto.randomUUID():"x"+Date.now().toString(36)+Math.random().toString(36).slice(2,10));
 const groupOf=k=>GROUPS.find(g=>g.k===k)||GROUPS[2];
 const incomeCats=()=>[...(S.incomeCats||["Doctor's Fees","Medicine sold"]), ...((S.extra||{}).inc||[])];
-const cats=g=>{
-  if(g==="inc") return incomeCats();
-  return [...groupOf(g).c,...((S.extra||{})[g]||[])];
-};
+const cats=g=>g==="inc"?incomeCats():[...groupOf(g).c,...((S.extra||{})[g]||[])];
 const fmt=n=>S.cur+" "+(Math.round(n*100)/100).toLocaleString("en-US",{maximumFractionDigits:2});
 const live=()=>E.filter(e=>!e.del);
 const pending=e=>!e.sy||e.sy<e.u;
@@ -112,8 +109,7 @@ function banner(){
  if(S.url&&syncErr&&E.some(pending)&&age>2)return`<div class="ban">Some entries have not reached the Google Sheet yet. They are safe on this phone and will be sent when the internet is available.</div>`;
  return"";
 }
-function hdr(){const n=E.filter(pending).length,p=$("#pill");
- p.textContent=!S.url||!S.key?"Not syncing":syncing?"Sending...":syncErr?"Not sent":n?n+" to send":"Synced ✓"}
+function hdr(){const n=E.filter(pending).length,p=$("#pill");p.textContent=!S.url||!S.key?"Not syncing":syncing?"Sending...":syncErr?"Not sent":n?n+" to send":"Synced ✓"}
 
 function addView(){
  if(!fm.d)fm.d=today();
@@ -164,12 +160,14 @@ function saveEntry(){
    }
  }
  if(editing){const e=E.find(x=>x.id===editing);if(e)Object.assign(e,f)}else E.push({id:uid(),del:false,sy:"",cr:now,...f});
- if(!save())return;const was=editing;resetForm();toast(was?"Changes saved.":"Saved ✓");kickSync();if(was)view="list";draw()
+ if(!save())return;const was=editing;resetForm();toast(was?"Changes saved.":"Saved ✓");kickSync();if(was)view="list";draw();
+ if(fm.g==='inc' && fm.c==='Medicine sold' && !editing){
+   const med=(S.meds||[]).find(m=>m.name===f.w || m.name===$("#medsel")?.value);
+ }
 }
 function editEntry(id){const e=E.find(x=>x.id===id);if(!e)return;editing=id;fm={g:e.g,c:e.c,a:String(e.a),d:e.d,w:e.w,n:e.n,med:"",qty:1,adj:""};view="add";draw();window.scrollTo(0,0)}
 function cancelEdit(){resetForm();view="list";draw()}
 function delEntry(){if(!confirm("Delete this entry? It will be removed from the list and from the Google Sheet totals."))return;const e=E.find(x=>x.id===editing);if(e){e.del=true;e.u=new Date().toISOString()}save();resetForm();toast("Deleted.");kickSync();view="list";draw()}
-
 function listView(){
  const ms=months(),m=ms.includes(fMonth)||fMonth==="all"?fMonth:(ms[0]||"all");fMonth=m;
  const rows=live().filter(e=>m==="all"||e.d.slice(0,7)===m).sort((a,b)=>b.d.localeCompare(a.d)||b.cr.localeCompare(a.cr));
@@ -213,6 +211,10 @@ function sumView(){
      html+=`<div class="card"><h2>Medicines sold</h2>${Object.keys(medAgg).map(m=>`<div style="display:flex;justify-content:space-between"><div>${esc(m)} · ${medAgg[m].qty} units</div><div>${fmt(medAgg[m].amount)}</div></div>`).join("")}</div>`;
    }
  }
+ if((S.meds||[]).length){
+   const lowStock=(S.meds||[]).filter(m=>(Number(m.stock)||0)<=5).map(m=>`${m.name}: ${Number(m.stock)||0}`);
+   if(lowStock.length){ html += `<div class="card"><h2>Low stock</h2>${lowStock.map(x=>`<div class="mut">${esc(x)}</div>`).join("")}</div>`; }
+ }
  return html;
 }
 
@@ -231,11 +233,12 @@ function setView(){
  <label>Add another income category</label><input id="newInc" placeholder="Consultation charges">
  <button class="b s" onclick="addIncomeCat()">Add income category</button></div>
  <div class="card"><h2>Medicines (for "Medicine sold")</h2>
- <p class="mut">Add medicines with cost and sell price. They will be available when adding a "Medicine sold" income entry.</p>
- <div id="medlist">${(S.meds||[]).length?(S.meds||[]).map((m,i)=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0"><div><b>${esc(m.name)}</b><div class="mut">Cost: ${m.cost} · Sell: ${m.sell}</div></div><div><button class="b s" onclick="editMed(${i})">Edit</button> <button class="b d" onclick="deleteMed(${i})">Delete</button></div></div>`).join(""):`<p class="mut">No medicines added yet.</p>`}</div>
+ <p class="mut">Add medicines with cost, sell price, and current stock. Selling medicine reduces stock automatically.</p>
+ <div id="medlist">${(S.meds||[]).length?(S.meds||[]).map((m,i)=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0"><div><b>${esc(m.name)}</b><div class="mut">Cost: ${m.cost} · Sell: ${m.sell} · Stock: ${Number(m.stock)||0}</div></div><div><button class="b s" onclick="editMed(${i})">Edit</button> <button class="b d" onclick="deleteMed(${i})">Delete</button></div></div>`).join(""):`<p class="mut">No medicines added yet.</p>`}</div>
  <label>Medicine name</label><input id="mn">
  <label>Cost price</label><input id="mc" inputmode="decimal">
  <label>Sell price</label><input id="ms" inputmode="decimal">
+ <label>Stock on hand</label><input id="mst" type="number" min="0" value="0">
  <button class="b s" onclick="addMed()">Add / Update medicine</button></div>
  <div class="card"><h2>Backup on this phone</h2><p class="mut">Use Share to save a copy to Files, Google Drive, WhatsApp or email.</p>
  <button class="b s" onclick="exportCsv()">Share expenses spreadsheet (CSV)</button><button class="b s" onclick="exportJson()">Save a backup file</button>
@@ -247,27 +250,33 @@ function setView(){
  <label>Add your own category</label><select id="xg">${GROUPS.map(g=>`<option value="${g.k}">${esc(g.n)}</option>`).join("")}</select><input id="xc" placeholder="Category name" style="margin-top:8px">
  <button class="b s" onclick="addCat()">Add category</button></div>`}
 function saveIncomeLabels(){
- const doc = $("#incDoc").value.trim() || "Doctor's Fees";
- const med = $("#incMed").value.trim() || "Medicine sold";
- S.incomeCats = [doc, med];
- if(!S.extra) S.extra = {};
- S.extra.inc = (S.extra.inc || []).filter(x => !["Doctor's Fees","Medicine sold"].includes(x));
- save(); toast("Income labels saved."); draw();
+ const doc=$("#incDoc").value.trim()||"Doctor's Fees";
+ const med=$("#incMed").value.trim()||"Medicine sold";
+ S.incomeCats=[doc,med];
+ if(!S.extra)S.extra={};
+ S.extra.inc=(S.extra.inc||[]).filter(x=>!['Doctor\'s Fees','Medicine sold'].includes(x));
+ save();toast("Income labels saved.");draw();
 }
 function addIncomeCat(){
- const val = $("#newInc").value.trim();
- if(!val) return toast("Enter an income category name.",1);
- if(incomeCats().includes(val)) return toast("That income category already exists.",1);
- (S.extra.inc = S.extra.inc || []).push(val);
- save(); $("#newInc").value=''; toast("Income category added."); draw();
+ const val=$("#newInc").value.trim();
+ if(!val)return toast("Enter an income category name.",1);
+ if(incomeCats().includes(val))return toast("That income category already exists.",1);
+ (S.extra.inc=S.extra.inc||[]).push(val);save();$("#newInc").value='';toast("Income category added.");draw();
 }
 function addCat(){const g=$("#xg").value,c=$("#xc").value.trim();if(!c)return;if(cats(g).includes(c)){toast("That category already exists.",1);return}(S.extra[g]=S.extra[g]||[]).push(c);save();toast("Category added.");draw()}
-function addMed(){const name=$("#mn").value.trim();const cost=parseFloat($("#mc").value)||0;const sell=parseFloat($("#ms").value)||0;if(!name){toast("Enter a medicine name.",1);return}
- const i=(S.meds||[]).findIndex(m=>m.name.toLowerCase()===name.toLowerCase());
+function addMed(){
+ const name=$("#mn").value.trim();
+ const cost=parseFloat($("#mc").value)||0;
+ const sell=parseFloat($("#ms").value)||0;
+ const stock=parseInt($("#mst").value,10)||0;
+ if(!name){toast("Enter a medicine name.",1);return}
  const list=(S.meds||[]);
- if(i>=0){list[i]={name,cost,sell};}else{list.push({name,cost,sell});}
- S.meds=list; save();toast("Medicine saved.");draw();$("#mn").value=$("#mc").value=$("#ms").value=""}
-function editMed(i){const m=(S.meds||[])[i];if(!m)return;$("#mn").value=m.name;$("#mc").value=m.cost;$("#ms").value=m.sell;S.meds.splice(i,1);save();draw()}
+ const idx=list.findIndex(m=>m.name.toLowerCase()===name.toLowerCase());
+ if(idx>=0){list[idx]={name,cost,sell,stock};}
+ else{list.push({name,cost,sell,stock});}
+ S.meds=list; save();toast("Medicine saved.");draw();$("#mn").value=$("#mc").value=$("#ms").value=$("#mst").value="";
+}
+function editMed(i){const m=(S.meds||[])[i];if(!m)return;$("#mn").value=m.name;$("#mc").value=m.cost;$("#ms").value=m.sell;$("#mst").value=(m.stock||0);S.meds.splice(i,1);save();draw()}
 function deleteMed(i){if(!confirm("Delete this medicine?"))return;const list=(S.meds||[]);list.splice(i,1);S.meds=list;save();toast("Deleted.");draw()}
 
 const rowOf=e=>({id:e.id,d:e.d,a:e.a,g:e.g,gn:groupOf(e.g).n,c:e.c,w:e.w,n:e.n,del:!!e.del,u:e.u,dev:S.dev});
